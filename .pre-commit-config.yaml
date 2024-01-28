@@ -1,0 +1,28 @@
+---
+repos:
+  - repo: local
+    hooks:
+      - id: shellcheck
+        name: shellcheck
+        language: system
+        entry: shellcheck --external-sources
+        types: [shell]
+      - id: shfmt
+        name: shfmt
+        language: system
+        entry: shfmt --indent 4 --diff --write
+        types: [shell]
+      - id: eslint
+        name: eslint
+        language: system
+        entry: node node_modules/eslint/bin/eslint.js
+        files: \.(vue|js)$
+      - id: prettier
+        name: prettier
+        language: system
+        entry: node node_modules/prettier/bin/prettier.cjs --tab-width 4 --write
+        files: \.(vue|js|css|html|json|cjs|mjs)$
+  - repo: https://github.com/lyz-code/yamlfix
+    rev: 1.1.1
+    hooks:
+      - id: yamlfix

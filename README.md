@@ -39,3 +39,14 @@ npm run test:unit
 ```sh
 npm run lint
 ```
+
+### Install new package with Docker
+
+
+```sh
+./run.sh ./npm.sh install @polkadot/types
+```
+
+## Indexing
+
+If you need to see all transactions by account (public key): `https://alephzero.subscan.io/account/5GTfcztcRBjBc1Tif4TP72K5X9p3zxAxYKV1kyNfxgTD4SU9?tab=transfer`.
