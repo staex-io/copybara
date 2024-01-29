@@ -225,14 +225,14 @@ label {
 }
 
 .error {
-    width: 19rem;
+    width: 39rem;
     padding: 4px;
     background: var(--staex-red);
     color: var(--staex-stardust-silver);
 }
 
 .success {
-    width: 19rem;
+    width: 39rem;
     padding: 4px;
     background: var(--staex-green);
     color: var(--staex-dark-pacific-blue);
@@ -243,28 +243,12 @@ label {
 }
 
 .warning {
-    width: 19rem;
+    width: 39rem;
     display: inline-block;
     padding: 4px;
     color: var(--staex-stardust-silver);
     background-color: var(--staex-red);
     text-align: left;
-}
-
-.suggestions {
-    width: 19rem;
-    display: inline-block;
-    padding: 4px;
-    background-color: var(--staex-green);
-    white-space: pre-wrap;
-    text-align: left;
-}
-
-.key-warning {
-    padding: 4px;
-    background-color: var(--staex-red);
-    color: var(--staex-stardust-silver);
-    max-width: 39rem;
 }
 
 pre {

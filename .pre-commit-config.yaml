@@ -16,7 +16,7 @@ repos:
         name: eslint
         language: system
         entry: node node_modules/eslint/bin/eslint.js
-        files: \.(vue|js)$
+        files: src/.*\.(vue|js)$
       - id: prettier
         name: prettier
         language: system
