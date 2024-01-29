@@ -5,7 +5,7 @@ import { ContractPromise } from '@polkadot/api-contract'
 import { ApiPromise, WsProvider } from '@polkadot/api'
 import metadata from '@/assets/metadata.json'
 import { contractQuery, contractTx } from '@scio-labs/use-inkathon'
-import { web3Enable, web3Accounts, web3FromAddress, isWeb3Injected } from '@polkadot/extension-dapp'
+import { web3Enable, web3Accounts, web3FromAddress } from '@polkadot/extension-dapp'
 
 export default {
     data() {
@@ -159,11 +159,6 @@ export default {
     },
     mounted() {
         ;(async () => {
-            if (!isWeb3Injected) {
-                alert('Please, connect AlephZero signer extension to use Copybara!')
-                return
-            }
-
             // Connect to AlephZero and init API and contract.
             const provider = new WsProvider('wss://ws.azero.dev/')
             const api = await ApiPromise.create({ provider })
