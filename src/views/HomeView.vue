@@ -5,7 +5,8 @@ import LoadingScreen from '@/components/LoadingScreen.vue'
 <script>
 import { AzeroId } from '@/azero-id.js'
 
-const NODE_ID_RECORD = 'StaexMCC_NodeId'
+const NODE_ID_RECORD = 'staex-id'
+const MCC_HTTP_URL = 'http://127.0.0.1:9377'
 const CHANNEL_OPTIONS = {
     negotiated: true,
     id: 123,
@@ -16,6 +17,10 @@ export default {
             state: 'dialing',
             sourceAzeroId: 'staex.azero',
             destinationAzeroId: 'copybara.azero',
+            sourceIp: '',
+            destinationIp: '',
+            sourceNodeId: '',
+            destinationNodeId: '',
             offer: '',
             answer: '',
             sender: null,
@@ -28,22 +33,52 @@ export default {
             receiverPayload: '',
             callRequestLink: '',
             callResponseLink: '',
+            error: '',
         }
     },
     methods: {
-        async dial() {
+        async senderInit() {
             const azeroId = await AzeroId.connect()
             const src = normalizeName(this.sourceAzeroId)
             const dst = normalizeName(this.destinationAzeroId)
             let srcNodeId = await azeroId.getRecord(src, NODE_ID_RECORD)
             let dstNodeId = await azeroId.getRecord(dst, NODE_ID_RECORD)
-            // TODO
-            srcNodeId = 'h8syf1xcv3rveegh00p89ew8sqbzkr4ckpjz3zs4xxr5tvf4hs4g'
-            dstNodeId = 'h8syf1xcv3rveegh00p89ew8sqbzkr4ckpjz3zs4xxr5tvf4hs4g'
-            console.log(src, srcNodeId)
-            console.log(dst, dstNodeId)
-            this.state = 'calling'
-            await this.sendFile()
+            const srcNodeId2 = await (await fetch(`${MCC_HTTP_URL}/id`)).json()
+            if (srcNodeId !== srcNodeId2) {
+                throw `Staex node id and your Azero Id do not match: ${srcNodeId2} vs. ${srcNodeId}.`
+            }
+            const srcIp = await resolveNodeId(srcNodeId)
+            const dstIp = await resolveNodeId(dstNodeId)
+            console.log(src, srcNodeId, srcIp)
+            console.log(dst, dstNodeId, dstIp)
+            this.sourceIp = srcIp
+            this.destinationIp = dstIp
+            this.sourceNodeId = srcNodeId
+            this.destinationNodeId = dstNodeId
+        },
+        async receiverInit(sourceNodeId, destinationNodeId) {
+            const localNodeId = await (await fetch(`${MCC_HTTP_URL}/id`)).json()
+            if (destinationNodeId !== localNodeId) {
+                throw `Destination node id does not match your local node id: ${destinationNodeId} vs. ${localNodeId}.`
+            }
+            const srcIp = await resolveNodeId(sourceNodeId)
+            const dstIp = await resolveNodeId(destinationNodeId)
+            console.log(sourceNodeId, srcIp)
+            console.log(destinationNodeId, dstIp)
+            this.sourceIp = srcIp
+            this.destinationIp = dstIp
+            this.sourceNodeId = sourceNodeId
+            this.destinationNodeId = destinationNodeId
+        },
+        async dial() {
+            this.error = ''
+            try {
+                await this.senderInit()
+                this.state = 'calling'
+                await this.sendFile()
+            } catch (error) {
+                this.error = error
+            }
         },
         createLocalStream: async function () {
             const constraints = {
@@ -58,7 +93,7 @@ export default {
         },
         getConfig() {
             return {
-                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+                //iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
             }
         },
         sendFile: async function () {
@@ -66,14 +101,20 @@ export default {
             // https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Perfect_negotiation
             const pc = new RTCPeerConnection(this.getConfig())
             pc.addEventListener('icecandidate', async (event) => {
-                console.log('sender ICE candidate: ', event.candidate)
                 if (event.candidate != null) {
-                    if (event.candidate.candidate.match(/.*10\.115\..*/)) {
+                    if (event.candidate.candidate.includes(this.sourceIp)) {
                         console.log('sender add ', event.candidate)
                         this.senderCandidates.push(event.candidate.toJSON())
                     }
                 } else {
-                    const payload = { offer: offer, candidates: this.senderCandidates }
+                    const payload = {
+                        offer: offer,
+                        candidates: this.senderCandidates,
+                        sourceNodeId: this.sourceNodeId,
+                        destinationNodeId: this.destinationNodeId,
+                        sourceIp: this.sourceIp,
+                    }
+                    console.log('sender payload', payload)
                     this.senderPayload = JSON.stringify(payload)
                     this.callRequestLink = await encodeLinkPayload(this.senderPayload)
                     this.state = 'call'
@@ -85,7 +126,6 @@ export default {
                 }
             }
             pc.ontrack = (event) => {
-                console.log('ontrack', event.streams)
                 const videoRemote = document.getElementById('video-remote')
                 if (videoRemote.srcObject !== event.streams[0]) {
                     videoRemote.srcObject = event.streams[0]
@@ -112,23 +152,28 @@ export default {
             this.sender = pc
         },
         receiveFile: async function () {
+            this.error = ''
+            const senderPayload = JSON.parse(this.senderPayload)
+            await this.receiverInit(senderPayload.sourceNodeId, senderPayload.destinationNodeId)
             const localStream = await this.createLocalStream()
             const pc = new RTCPeerConnection(this.getConfig())
             pc.addEventListener('icecandidate', async (event) => {
-                console.log('receiver ICE candidate: ', event.candidate)
                 if (event.candidate != null) {
-                    this.receiverCandidates.push(event.candidate.toJSON())
+                    if (event.candidate.candidate.includes(this.destinationIp)) {
+                        console.log('receiver add ', event.candidate)
+                        this.receiverCandidates.push(event.candidate.toJSON())
+                    }
                 } else {
                     this.receiverPayload = JSON.stringify({
                         answer: answer,
                         candidates: this.receiverCandidates,
+                        destinationIp: this.destinationIp,
                     })
                     this.callResponseLink = await encodeLinkPayload(this.receiverPayload)
                     this.state = 'call'
                 }
             })
             pc.ontrack = (event) => {
-                console.log('ontrack', event.streams)
                 const videoRemote = document.getElementById('video-remote')
                 if (videoRemote.srcObject !== event.streams[0]) {
                     videoRemote.srcObject = event.streams[0]
@@ -148,9 +193,10 @@ export default {
             this.receiveChannel.onerror = function (e) {
                 console.log('recv error', e)
             }
-            const senderPayload = JSON.parse(this.senderPayload)
             pc.setRemoteDescription(senderPayload.offer)
             for (const candidate of senderPayload.candidates) {
+                replaceIps(candidate, senderPayload.sourceIp, this.sourceIp)
+                console.log('add ice candidate', candidate)
                 await pc.addIceCandidate(candidate)
             }
             const answer = await pc.createAnswer()
@@ -181,6 +227,8 @@ export default {
             const receiverPayload = JSON.parse(payload)
             this.sender.setRemoteDescription(receiverPayload.answer)
             for (const candidate of receiverPayload.candidates) {
+                replaceIps(candidate, receiverPayload.destinationIp, this.destinationIp)
+                console.log('add ice candidate', candidate)
                 await this.sender.addIceCandidate(candidate)
             }
             this.state = 'call-in-progress'
@@ -257,6 +305,19 @@ function base64ToUint8Array(base64) {
 function normalizeName(name) {
     return name.trim().replace(/\.azero$/i, '')
 }
+
+// MCC dynamic ips
+function replaceIps(candidate, sourceIp, destinationIp) {
+    candidate.candidate = candidate.candidate.replace(sourceIp, destinationIp)
+}
+
+async function resolveNodeId(nodeId) {
+    return await (await fetch(`${MCC_HTTP_URL}/resolve?node-id=${nodeId}`)).json()
+}
+
+//async function resolveNodeIdStatic(nodeId) {
+//    return await (await fetch(`${MCC_HTTP_URL}/property?node-id=${nodeId}&name=static-addr`)).json()
+//}
 </script>
 
 <template>
@@ -301,6 +362,7 @@ function normalizeName(name) {
             <p><button @click="hide">Hide</button></p>
         </div>
     </div>
+    <div v-if="error !== ''" class="error">{{ error }}</div>
     <ul class="videos">
         <li><video id="video-local" autoplay></video></li>
         <li><video id="video-remote" autoplay></video></li>
